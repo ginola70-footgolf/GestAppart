@@ -590,10 +590,12 @@
     <button class="nav-btn" onclick="showSection('scadenze')">🔔 Scadenze</button>
   </div>
   <div class="topbar-actions">
-    <button class="btn btn-ghost btn-sm" onclick="exportData()" style="color:#A09890;border-color:#444;">⬆ Esporta</button>
-    <label class="btn btn-ghost btn-sm" style="color:#A09890;border-color:#444;cursor:pointer;">
-      ⬇ Importa <input type="file" accept=".json" style="display:none" onchange="importData(event)">
-    </label>
+    <div id="fileStatusBadge" style="display:none;align-items:center;gap:6px;font-size:12px;color:#8A9;padding:4px 10px;background:rgba(42,96,73,0.3);border-radius:3px;border:1px solid #2A6049;">
+      <span>💾</span><span id="fileStatusName"></span>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="openFile()" style="color:#A09890;border-color:#444;" title="Apri file JSON esistente">📂 Apri file</button>
+    <button class="btn btn-ghost btn-sm" onclick="saveFile()" style="color:#A09890;border-color:#444;" title="Salva su file JSON" id="btnSalva">💾 Salva</button>
+    <button class="btn btn-ghost btn-sm" onclick="newFile()" style="color:#A09890;border-color:#444;" title="Nuovo file vuoto">✨ Nuovo</button>
   </div>
 </nav>
 
@@ -1010,6 +1012,7 @@ function saveApt() {
     toast('Appartamento aggiunto');
   }
   DB.set(d);
+  autoSave();
   closeModal('modalApt');
   renderApt();
   populateAllSelects();
@@ -1022,6 +1025,7 @@ function deleteApt(id) {
     d.spese = d.spese.filter(s => s.aptId !== id);
     d.scadenze = d.scadenze.filter(s => s.aptId !== id);
     DB.set(d);
+    autoSave();
     renderApt();
     populateAllSelects();
     toast('Appartamento eliminato');
@@ -1101,6 +1105,7 @@ function saveSpesa() {
     toast('Spesa registrata');
   }
   DB.set(d);
+  autoSave();
   closeModal('modalSpesa');
   renderSpese();
   populateFilters();
@@ -1112,6 +1117,7 @@ function deleteSpesa(id) {
     const d = DB.get();
     d.spese = d.spese.filter(s => s.id !== id);
     DB.set(d);
+    autoSave();
     renderSpese();
     toast('Spesa eliminata');
   });
@@ -1200,6 +1206,7 @@ function saveScad() {
     toast('Scadenza aggiunta');
   }
   DB.set(d);
+  autoSave();
   closeModal('modalScad');
   renderScadenze();
 }
@@ -1209,6 +1216,7 @@ function deleteScad(id) {
     const d = DB.get();
     d.scadenze = d.scadenze.filter(s => s.id !== id);
     DB.set(d);
+    autoSave();
     renderScadenze();
     toast('Scadenza eliminata');
   });
@@ -1219,6 +1227,7 @@ function toggleScad(id) {
   const i = d.scadenze.findIndex(s => s.id === id);
   d.scadenze[i].completata = !d.scadenze[i].completata;
   DB.set(d);
+  autoSave();
   renderScadenze();
 }
 
@@ -1482,37 +1491,133 @@ function confirmAction(msg, cb) {
 }
 
 // ═══════════════════════════════════════════════
-//  EXPORT / IMPORT
+//  FILE SYSTEM ACCESS API
 // ═══════════════════════════════════════════════
-function exportData() {
+let fileHandle = null;
+const fsSupported = 'showOpenFilePicker' in window;
+
+function setFileStatus(name) {
+  const badge = document.getElementById('fileStatusBadge');
+  const nameEl = document.getElementById('fileStatusName');
+  if (name) {
+    nameEl.textContent = name;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// Apri un file JSON esistente
+async function openFile() {
+  if (!fsSupported) { legacyImport(); return; }
+  try {
+    [fileHandle] = await window.showOpenFilePicker({
+      types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+    });
+    const file = await fileHandle.getFile();
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data.apt || !data.spese) throw new Error('Struttura non valida');
+    // Normalizza chiave Data → data nelle spese
+    data.spese = data.spese.map(s => {
+      if (s.Data && !s.data) { s.data = s.Data; delete s.Data; }
+      return s;
+    });
+    DB.set(data);
+    setFileStatus(file.name);
+    populateAllSelects();
+    renderDashboard();
+    renderApt();
+    renderSpese();
+    toast('File aperto: ' + file.name);
+  } catch(e) {
+    if (e.name !== 'AbortError') toast('Errore apertura file: ' + e.message, 'error');
+  }
+}
+
+// Salva sul file aperto (o chiedi dove salvare)
+async function saveFile() {
+  if (!fsSupported) { legacyExport(); return; }
+  try {
+    if (!fileHandle) {
+      // Chiedi dove salvare
+      fileHandle = await window.showSaveFilePicker({
+        suggestedName: 'gestappart.json',
+        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+      });
+    }
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(DB.get(), null, 2));
+    await writable.close();
+    const file = await fileHandle.getFile();
+    setFileStatus(file.name);
+    toast('Salvato su ' + file.name);
+  } catch(e) {
+    if (e.name !== 'AbortError') toast('Errore salvataggio: ' + e.message, 'error');
+  }
+}
+
+// Nuovo file vuoto
+function newFile() {
+  confirmAction('Creare un nuovo archivio vuoto? I dati non salvati andranno persi.', () => {
+    fileHandle = null;
+    DB.set({ apt: [], spese: [], scadenze: [] });
+    setFileStatus(null);
+    populateAllSelects();
+    renderDashboard();
+    renderApt();
+    renderSpese();
+    toast('Nuovo archivio creato');
+  });
+}
+
+// Salvataggio automatico dopo ogni modifica
+async function autoSave() {
+  if (!fileHandle) return; // nessun file aperto, non fare nulla
+  try {
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(DB.get(), null, 2));
+    await writable.close();
+  } catch(e) {
+    // silenzioso
+  }
+}
+
+// Fallback legacy per browser non compatibili (Safari, Firefox)
+function legacyExport() {
   const d = DB.get();
   const blob = new Blob([JSON.stringify(d, null, 2)], {type: 'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'gestappart_backup_' + new Date().toISOString().split('T')[0] + '.json';
+  a.download = 'gestappart_' + new Date().toISOString().split('T')[0] + '.json';
   a.click();
-  toast('Backup esportato!');
+  toast('File scaricato (browser non supporta salvataggio diretto)');
 }
 
-function importData(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const data = JSON.parse(ev.target.result);
-      if (!data.apt || !data.spese) throw new Error();
-      DB.set(data);
-      populateAllSelects();
-      renderDashboard();
-      renderApt();
-      toast('Dati importati con successo!');
-    } catch {
-      toast('File non valido', 'error');
-    }
+function legacyImport() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!data.apt || !data.spese) throw new Error();
+        data.spese = data.spese.map(s => { if (s.Data && !s.data) { s.data = s.Data; delete s.Data; } return s; });
+        DB.set(data);
+        populateAllSelects();
+        renderDashboard();
+        renderApt();
+        renderSpese();
+        toast('Dati importati con successo!');
+      } catch { toast('File non valido', 'error'); }
+    };
+    reader.readAsText(file);
   };
-  reader.readAsText(file);
-  e.target.value = '';
+  input.click();
 }
 
 // ═══════════════════════════════════════════════
