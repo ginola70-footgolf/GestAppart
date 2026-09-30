@@ -921,11 +921,104 @@
 // ═══════════════════════════════════════════════
 //  DATA STORE
 // ═══════════════════════════════════════════════
+<script>
+const GITHUB_TOKEN = 'INSERISCI_TUO_TOKEN_QUI'; // es: ghp_abcd1234...
+const GITHUB_OWNER = 'ginola70-footgolf';
+const GITHUB_REPO = 'GestAppart';
+const GITHUB_FILE = 'data.json';
+const GITHUB_BRANCH = 'main';
+
+let fileData = null; // Cache dei dati
+
 const DB = {
-  get: () => JSON.parse(localStorage.getItem('gestappart') || '{"apt":[],"spese":[],"scadenze":[]}'),
-  set: (d) => localStorage.setItem('gestappart', JSON.stringify(d)),
-  uid: () => Date.now().toString(36) + Math.random().toString(36).slice(2,6)
+  uid: () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+
+  async get() {
+    try {
+      // Se abbiamo i dati in cache, restituiscili
+      if (fileData) {
+        return JSON.parse(JSON.stringify(fileData)); // Deep copy
+      }
+
+      // Altrimenti leggi da GitHub
+      const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}?ref=${GITHUB_BRANCH}`;
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3.raw'
+        }
+      });
+
+      if (!response.ok) {
+        console.error('Errore lettura da GitHub:', response.status);
+        toast('Errore nel caricamento dei dati', 'error');
+        return { apt: [], spese: [], scadenze: [] };
+      }
+
+      const text = await response.text();
+      fileData = JSON.parse(text);
+      return JSON.parse(JSON.stringify(fileData)); // Deep copy
+    } catch (error) {
+      console.error('Errore:', error);
+      toast('Errore nel caricamento dei dati', 'error');
+      return { apt: [], spese: [], scadenze: [] };
+    }
+  },
+
+  async set(data) {
+    try {
+      // Aggiorna il cache locale
+      fileData = JSON.parse(JSON.stringify(data));
+
+      // Salva su GitHub
+      const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}`;
+
+      // Leggi il SHA corrente del file (necessario per l'aggiornamento)
+      const getResponse = await fetch(url + `?ref=${GITHUB_BRANCH}`, {
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (!getResponse.ok) {
+        throw new Error('Impossibile leggere il file da GitHub');
+      }
+
+      const fileInfo = await getResponse.json();
+      const sha = fileInfo.sha;
+
+      // Codifica il contenuto in Base64
+      const content = btoa(JSON.stringify(data, null, 2));
+
+      // Invia l'aggiornamento
+      const putResponse = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `token ${GITHUB_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `Aggiornamento dati - ${new Date().toLocaleString('it-IT')}`,
+          content: content,
+          sha: sha,
+          branch: GITHUB_BRANCH
+        })
+      });
+
+      if (!putResponse.ok) {
+        throw new Error(`Errore GitHub: ${putResponse.status}`);
+      }
+
+      toast('Dati salvati su GitHub ✓', 'success');
+    } catch (error) {
+      console.error('Errore salvataggio:', error);
+      toast('Errore nel salvataggio dei dati', 'error');
+      throw error;
+    }
+  }
 };
+</script>
 
 let editingId = null;
 
