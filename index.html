@@ -881,6 +881,15 @@
     </div>
   </div>
 
+  <div class="modal-footer">
+  <button class="btn btn-ghost" onclick="closeModal('modalConfirm')">
+    Annulla
+  </button>
+  <button class="btn btn-danger" id="confirmOk">
+    Elimina
+  </button>
+</div>
+
 <script>
   // ============================================================
   // CONFIGURAZIONE
@@ -889,7 +898,7 @@
   // - NON lasciare token GitHub nel browser in produzione
   // - usa un backend o un secret server-side per scrivere sul repo
   // - qui manteniamo un fallback locale per non far crashare l'app
-  const GITHUB_TOKEN = "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";
+  const GITHUB_TOKEN = "";
   const GITHUB_OWNER = "ginola70-footgolf";
   const GITHUB_REPO = "GestAppart";
   const GITHUB_BRANCH = "main";
@@ -1233,6 +1242,29 @@
     showSection("dashboard");
   }
 
-  document.getElementById("confirmOk").addEventListener("click", deleteConfirmed);
+  document.addEventListener("DOMContentLoaded", () => {
+  const confirmOk = document.getElementById("confirmOk");
+
+  if (confirmOk && typeof deleteConfirmed === "function") {
+    confirmOk.addEventListener("click", deleteConfirmed);
+  }
+
+  initApp().catch((error) => {
+    console.error("Errore durante l'inizializzazione:", error);
+
+    const main = document.querySelector(".main");
+    if (main) {
+      main.insertAdjacentHTML(
+        "afterbegin",
+        `<div class="card" style="margin-bottom:20px;color:var(--danger)">
+          Errore durante il caricamento dell'applicazione.
+          Controlla la console per maggiori informazioni.
+        </div>`
+      );
+    }
+  });
+});
   initApp();
 </script>
+</body>
+</html>
