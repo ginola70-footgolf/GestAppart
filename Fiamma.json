@@ -1,0 +1,40 @@
+{
+    "apt": [
+        {
+            "id": "apt002",
+            "nome": "Fiamma",
+            "addr": "",
+            "piano": "",
+            "mq": "",
+            "note": ""
+        }
+    ],
+    "spese": [
+        { "id": "sp001", "data": "2019-09-12", "importo": -54.75, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp002", "data": "2020-05-05", "importo": -44.10, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp003", "data": "2020-06-24", "importo": -44.10, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp004", "data": "2020-09-07", "importo": -44.10, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp005", "data": "2020-11-03", "importo": -44.31, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp006", "data": "2020-12-28", "importo": -27.10, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp007", "data": "2021-03-08", "importo": -46.44, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp008", "data": "2021-05-06", "importo": -47.04, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp009", "data": "2021-06-30", "importo": -47.36, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp010", "data": "2021-09-15", "importo": -44.87, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp011", "data": "2021-11-10", "importo": -44.36, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp012", "data": "2021-12-27", "importo": -27.91, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp013", "data": "2022-09-06", "importo": -140.00, "aptId": "apt002", "causale": "Condominio", "dettaglio": "1", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp014", "data": "2022-09-20", "importo": -140.00, "aptId": "apt002", "causale": "Condominio", "dettaglio": "2", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp015", "data": "2022-11-16", "importo": -140.00, "aptId": "apt002", "causale": "Condominio", "dettaglio": "3", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp016", "data": "2022-05-06", "importo": -46.13, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp017", "data": "2022-07-08", "importo": -46.40, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp018", "data": "2022-09-08", "importo": -53.83, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp019", "data": "2022-11-10", "importo": -44.94, "aptId": "apt002", "causale": "Luce", "dettaglio": "", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp020", "data": "2023-02-10", "importo": -222.00, "aptId": "apt002", "causale": "Condominio", "dettaglio": "1", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp021", "data": "2023-03-14", "importo": -222.00, "aptId": "apt002", "causale": "Condominio", "dettaglio": "2", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp022", "data": "2023-05-17", "importo": -222.00, "aptId": "apt002", "causale": "Condominio", "dettaglio": "3", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp023", "data": "2023-07-21", "importo": -222.00, "aptId": "apt002", "causale": "Condominio", "dettaglio": "4", "fornitore": " ", "ricevuta": " " },
+        { "id": "sp024", "data": "2024-04-02", "importo": -222.00, "aptId": "apt002", "causale": "Condominio", "dettaglio": "5", "fornitore": " ", "ricevuta": " " }
+    ],
+    "scadenze": [
+    ]
+}
