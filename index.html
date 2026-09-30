@@ -1084,31 +1084,31 @@ function openAptModal(id = null) {
   openModal('modalApt');
 }
 
-function saveApt() {
+async function saveApt() {
   const nome = document.getElementById('aptNome').value.trim();
   if (!nome) { toast('Inserisci un nome', 'error'); return; }
-  const d = await DB.get();
+
+  const d = await DB.get();  // ← await
   const apt = {
     id: editingId || DB.uid(),
     nome,
     addr: document.getElementById('aptAddr').value.trim(),
     piano: document.getElementById('aptPiano').value.trim(),
-    mq: document.getElementById('aptMq').value,
+    mq: document.getElementById('aptMq').value.trim(),
     note: document.getElementById('aptNote').value.trim()
   };
+
   if (editingId) {
-    const i = d.apt.findIndex(a => a.id === editingId);
-    d.apt[i] = apt;
-    toast('Appartamento aggiornato');
+    const idx = d.apt.findIndex(a => a.id === editingId);
+    if (idx !== -1) d.apt[idx] = { ...d.apt[idx], ...apt };
   } else {
     d.apt.push(apt);
-    toast('Appartamento aggiunto');
   }
-  DB.set(d);
-  autoSave();
+
+  await DB.set(d);  // ← await
   closeModal('modalApt');
   renderApt();
-  populateAllSelects();
+  toast('Appartamento salvato ✓', 'success');
 }
 
 function deleteApt(id) {
