@@ -1073,7 +1073,7 @@ const daysDiff = s => Math.round((new Date(s + 'T00:00:00') - new Date()) / 8640
 // ═══════════════════════════════════════════════
 function openAptModal(id = null) {
   editingId = id;
-  const d = DB.get();
+  const d = await DB.get();
   document.getElementById('modalAptTitle').textContent = id ? 'Modifica appartamento' : 'Nuovo appartamento';
   const apt = id ? d.apt.find(a => a.id === id) : {};
   document.getElementById('aptNome').value = apt?.nome || '';
@@ -1087,7 +1087,7 @@ function openAptModal(id = null) {
 function saveApt() {
   const nome = document.getElementById('aptNome').value.trim();
   if (!nome) { toast('Inserisci un nome', 'error'); return; }
-  const d = DB.get();
+  const d = await DB.get();
   const apt = {
     id: editingId || DB.uid(),
     nome,
@@ -1113,7 +1113,7 @@ function saveApt() {
 
 function deleteApt(id) {
   confirmAction('Eliminare questo appartamento e tutte le sue spese?', () => {
-    const d = DB.get();
+    const d = await DB.get();
     d.apt = d.apt.filter(a => a.id !== id);
     d.spese = d.spese.filter(s => s.aptId !== id);
     d.scadenze = d.scadenze.filter(s => s.aptId !== id);
@@ -1126,7 +1126,7 @@ function deleteApt(id) {
 }
 
 function renderApt() {
-  const d = DB.get();
+  const d = await DB.get();
   const grid = document.getElementById('aptGrid');
   if (!d.apt.length) {
     grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">🏢</div><p>Aggiungi il primo appartamento</p></div>';
@@ -1157,7 +1157,7 @@ function renderApt() {
 // ═══════════════════════════════════════════════
 function openSpesaModal(id = null) {
   editingId = id;
-  const d = DB.get();
+  const d = await DB.get();
   document.getElementById('modalSpesaTitle').textContent = id ? 'Modifica spesa' : 'Nuova spesa';
   const sp = id ? d.spese.find(s => s.id === id) : {};
 
@@ -1181,7 +1181,7 @@ function saveSpesa() {
   const causale = document.getElementById('spCausale').value;
   if (!data || !importo || !aptId || !causale) { toast('Compila i campi obbligatori', 'error'); return; }
 
-  const d = DB.get();
+  const d = await DB.get();
   const sp = {
     id: editingId || DB.uid(),
     data, importo: parseFloat(importo), aptId, causale,
@@ -1207,7 +1207,7 @@ function saveSpesa() {
 
 function deleteSpesa(id) {
   confirmAction('Eliminare questa spesa?', () => {
-    const d = DB.get();
+    const d = await DB.get();
     d.spese = d.spese.filter(s => s.id !== id);
     DB.set(d);
     autoSave();
@@ -1217,7 +1217,7 @@ function deleteSpesa(id) {
 }
 
 function renderSpese() {
-  const d = DB.get();
+  const d = await DB.get();
   const fApt = document.getElementById('fApt')?.value || '';
   const fYear = document.getElementById('fYear')?.value || '';
   const fCausale = document.getElementById('fCausale')?.value || '';
@@ -1259,7 +1259,7 @@ function renderSpese() {
 // ═══════════════════════════════════════════════
 function openScadModal(id = null) {
   editingId = id;
-  const d = DB.get();
+  const d = await DB.get();
   document.getElementById('modalScadTitle').textContent = id ? 'Modifica scadenza' : 'Nuova scadenza';
   const sc = id ? d.scadenze.find(s => s.id === id) : {};
 
@@ -1279,7 +1279,7 @@ function saveScad() {
   const data = document.getElementById('scData').value;
   const desc = document.getElementById('scDesc').value.trim();
   if (!data || !desc) { toast('Inserisci data e descrizione', 'error'); return; }
-  const d = DB.get();
+  const d = await DB.get();
   const sc = {
     id: editingId || DB.uid(),
     data, desc,
@@ -1306,7 +1306,7 @@ function saveScad() {
 
 function deleteScad(id) {
   confirmAction('Eliminare questa scadenza?', () => {
-    const d = DB.get();
+    const d = await DB.get();
     d.scadenze = d.scadenze.filter(s => s.id !== id);
     DB.set(d);
     autoSave();
@@ -1316,7 +1316,7 @@ function deleteScad(id) {
 }
 
 function toggleScad(id) {
-  const d = DB.get();
+  const d = await DB.get();
   const i = d.scadenze.findIndex(s => s.id === id);
   d.scadenze[i].completata = !d.scadenze[i].completata;
   DB.set(d);
@@ -1325,7 +1325,7 @@ function toggleScad(id) {
 }
 
 function renderScadenze() {
-  const d = DB.get();
+  const d = await DB.get();
   const fApt = document.getElementById('sfApt')?.value || '';
   const fStato = document.getElementById('sfStato')?.value || '';
   const today = new Date().toISOString().split('T')[0];
@@ -1383,7 +1383,7 @@ function scadCard(s, d) {
 //  REPORT
 // ═══════════════════════════════════════════════
 function renderReport() {
-  const d = DB.get();
+  const d = await DB.get();
   const rYear = document.getElementById('rYear')?.value || 'all';
   const rApt = document.getElementById('rApt')?.value || 'all';
 
@@ -1479,7 +1479,7 @@ function detailRows(spese) {
 //  DASHBOARD
 // ═══════════════════════════════════════════════
 function renderDashboard() {
-  const d = DB.get();
+  const d = await DB.get();
   const yr = document.getElementById('dashYear')?.value || 'all';
   const today = new Date().toISOString().split('T')[0];
 
@@ -1526,7 +1526,7 @@ function populateAllSelects() {
 }
 
 function populateFilters() {
-  const d = DB.get();
+  const d = await DB.get();
   const fApt = document.getElementById('fApt');
   if (!fApt) return;
   const v = fApt.value;
@@ -1541,7 +1541,7 @@ function populateFilters() {
 }
 
 function populateYearSelects() {
-  const d = DB.get();
+  const d = await DB.get();
   const years = [...new Set(d.spese.map(s => s.data?.slice(0,4)))].filter(Boolean).sort().reverse();
 
   ['fYear', 'dashYear', 'rYear'].forEach(id => {
@@ -1555,7 +1555,7 @@ function populateYearSelects() {
 }
 
 function populateScadFilters() {
-  const d = DB.get();
+  const d = await DB.get();
   const sfApt = document.getElementById('sfApt');
   if (!sfApt) return;
   const v = sfApt.value;
@@ -1564,7 +1564,7 @@ function populateScadFilters() {
 }
 
 function populateReportFilters() {
-  const d = DB.get();
+  const d = await DB.get();
   const rApt = document.getElementById('rApt');
   if (!rApt) return;
   const v = rApt.value;
@@ -1640,7 +1640,7 @@ async function saveFile() {
       });
     }
     const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(DB.get(), null, 2));
+    await writable.write(JSON.stringify(await DB.get(), null, 2));
     await writable.close();
     const file = await fileHandle.getFile();
     setFileStatus(file.name);
@@ -1669,7 +1669,7 @@ async function autoSave() {
   if (!fileHandle) return; // nessun file aperto, non fare nulla
   try {
     const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(DB.get(), null, 2));
+    await writable.write(JSON.stringify(await DB.get(), null, 2));
     await writable.close();
   } catch(e) {
     // silenzioso
@@ -1678,7 +1678,7 @@ async function autoSave() {
 
 // Fallback legacy per browser non compatibili (Safari, Firefox)
 function legacyExport() {
-  const d = DB.get();
+  const d = await DB.get();
   const blob = new Blob([JSON.stringify(d, null, 2)], {type: 'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
