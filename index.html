@@ -1,1737 +1,355 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GestAppart — Gestione Spese Appartamenti</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #F5F0E8;
-      --surface: #FDFAF4;
-      --surface2: #EDE8DC;
-      --border: #D4CDB8;
-      --ink: #1A1714;
-      --ink-muted: #6B6456;
-      --accent: #C8410A;
-      --accent-light: #F5E6DF;
-      --accent2: #2A6049;
-      --accent2-light: #DFF0E8;
-      --warn: #B5860C;
-      --warn-light: #FEF3D0;
-      --danger: #A01A1A;
-      --danger-light: #FCEAEA;
-      --radius: 3px;
-      --shadow: 0 2px 12px rgba(26,23,20,0.08);
-      --shadow-lg: 0 8px 32px rgba(26,23,20,0.12);
+<script>
+  // ============================================================
+  // CONFIGURAZIONE
+  // ============================================================
+  // ATTENZIONE:
+  // - NON lasciare token GitHub nel browser in produzione
+  // - usa un backend o un secret server-side per scrivere sul repo
+  // - qui manteniamo un fallback locale per non far crashare l'app
+  const GITHUB_TOKEN = "";
+  const GITHUB_OWNER = "ginola70-footgolf";
+  const GITHUB_REPO = "GestAppart";
+  const GITHUB_BRANCH = "main";
+  const GITHUB_FILE = "data.json";
+  const CACHE_KEY = "gestappart-cache";
+
+  const state = {
+    editingId: null,
+    confirmAction: null
+  };
+
+  function toast(msg, type = "success") {
+    const t = document.createElement("div");
+    t.className = "toast " + type;
+    t.textContent = (type === "success" ? "✓ " : "✗ ") + msg;
+    document.getElementById("toastContainer").appendChild(t);
+    setTimeout(() => t.remove(), 3000);
+  }
+
+  function openModal(id) {
+    document.getElementById(id).classList.add("open");
+  }
+
+  function closeModal(id) {
+    document.getElementById(id).classList.remove("open");
+    if (id === "modalConfirm") {
+      state.confirmAction = null;
+    } else {
+      state.editingId = null;
+    }
+  }
+
+  document.querySelectorAll(".modal-overlay").forEach((o) => {
+    o.addEventListener("click", (e) => {
+      if (e.target === o) o.classList.remove("open");
+    });
+  });
+
+  function fmtEur(n) {
+    const value = Number(n) || 0;
+    return "€ " + value.toLocaleString("it-IT", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  function fmtDate(s) {
+    return s ? new Date(s + "T00:00:00").toLocaleDateString("it-IT") : "";
+  }
+
+  function daysDiff(s) {
+    return Math.round((new Date(s + "T00:00:00") - new Date()) / 86400000);
+  }
+
+  function normalizeString(value) {
+    return (value ?? "").toString().trim();
+  }
+
+  function sanitizePiano(value) {
+    const v = normalizeString(value).replace(/°/g, "").trim();
+    return v === "" ? "" : v;
+  }
+
+  function sanitizeNumero(value, fallback = "") {
+    const v = normalizeString(value).replace(",", ".");
+    if (v === "") return fallback;
+    const num = Number(v);
+    return Number.isFinite(num) ? num : fallback;
+  }
+
+  // ============================================================
+  // DB JSON locale + GitHub backup
+  // ============================================================
+  function decodeBase64UTF8(str) {
+    try {
+      return decodeURIComponent(
+        atob(str)
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
+      );
+    } catch {
+      return atob(str);
+    }
+  }
+
+  async function fetchGitHubJson() {
+    if (!GITHUB_TOKEN) {
+      throw new Error("Token GitHub non configurato");
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: 'DM Sans', sans-serif;
-      background: var(--bg);
-      color: var(--ink);
-      min-height: 100vh;
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .topbar {
-      background: var(--ink);
-      color: var(--bg);
-      padding: 0 32px;
-      display: flex;
-      align-items: center;
-      gap: 24px;
-      height: 56px;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-
-    .topbar-logo {
-      font-family: 'DM Serif Display', serif;
-      font-size: 20px;
-      letter-spacing: -0.5px;
-      color: var(--bg);
-      flex-shrink: 0;
-    }
-
-    .topbar-logo span { color: var(--accent); }
-
-    .topbar-nav {
-      display: flex;
-      gap: 2px;
-      flex: 1;
-      margin-left: 24px;
-    }
-
-    .nav-btn {
-      background: none;
-      border: none;
-      color: #A09890;
-      cursor: pointer;
-      padding: 6px 14px;
-      border-radius: var(--radius);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 13px;
-      font-weight: 500;
-      letter-spacing: 0.02em;
-      transition: all 0.15s;
-    }
-
-    .nav-btn:hover { color: var(--bg); background: rgba(255,255,255,0.08); }
-    .nav-btn.active { color: var(--bg); background: var(--accent); }
-
-    .topbar-actions {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .main {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 32px 24px 48px;
-    }
-
-    .section { display: none; }
-    .section.active { display: block; }
-
-    .page-header {
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      margin-bottom: 28px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .page-title {
-      font-family: 'DM Serif Display', serif;
-      font-size: 30px;
-      line-height: 1.1;
-      letter-spacing: -0.5px;
-    }
-
-    .page-subtitle {
-      color: var(--ink-muted);
-      font-size: 13px;
-      margin-top: 4px;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 9px 18px;
-      border-radius: var(--radius);
-      border: none;
-      cursor: pointer;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 13px;
-      font-weight: 500;
-      transition: all 0.15s;
-      text-decoration: none;
-      white-space: nowrap;
-    }
-
-    .btn-primary { background: var(--accent); color: white; }
-    .btn-primary:hover { background: #A8350A; }
-    .btn-ghost { background: transparent; color: var(--ink-muted); border: 1px solid var(--border); }
-    .btn-ghost:hover { background: var(--surface2); color: var(--ink); }
-    .btn-danger { background: var(--danger-light); color: var(--danger); border: 1px solid #F0B8B8; }
-    .btn-danger:hover { background: var(--danger); color: white; }
-    .btn-success { background: var(--accent2); color: white; }
-    .btn-success:hover { background: #1E4F3A; }
-    .btn-sm { padding: 5px 11px; font-size: 12px; }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      box-shadow: var(--shadow);
-    }
-
-    .stats-bar {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-
-    .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px 20px;
-    }
-
-    .stat-label {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--ink-muted);
-      margin-bottom: 6px;
-    }
-
-    .stat-value {
-      font-family: 'DM Mono', monospace;
-      font-size: 22px;
-      font-weight: 500;
-      color: var(--ink);
-    }
-
-    .stat-value.accent { color: var(--accent); }
-    .stat-value.success { color: var(--accent2); }
-    .stat-value.warn { color: var(--warn); }
-
-    .table-wrap {
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      background: var(--surface);
-    }
-
-    table { width: 100%; border-collapse: collapse; }
-
-    thead { background: var(--surface2); }
-
-    th {
-      padding: 10px 14px;
-      text-align: left;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--ink-muted);
-      border-bottom: 1px solid var(--border);
-    }
-
-    td {
-      padding: 11px 14px;
-      border-bottom: 1px solid rgba(212,205,184,0.5);
-      vertical-align: middle;
-    }
-
-    tr:last-child td { border-bottom: none; }
-    tr:hover td { background: var(--accent-light); }
-
-    td.mono { font-family: 'DM Mono', monospace; }
-    td.amount { font-family: 'DM Mono', monospace; font-weight: 500; color: var(--accent); }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 9px;
-      border-radius: 2px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-    }
-
-    .badge-apt { background: var(--accent-light); color: var(--accent); }
-    .badge-causale { background: var(--accent2-light); color: var(--accent2); }
-    .badge-warn { background: var(--warn-light); color: var(--warn); }
-    .badge-danger { background: var(--danger-light); color: var(--danger); }
-    .badge-ok { background: var(--accent2-light); color: var(--accent2); }
-
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(26,23,20,0.55);
-      z-index: 1000;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    .modal-overlay.open { display: flex; }
-
-    .modal {
-      background: var(--surface);
-      border-radius: var(--radius);
-      width: 100%;
-      max-width: 520px;
-      box-shadow: var(--shadow-lg);
-      overflow: hidden;
-      animation: slideUp 0.2s ease;
-    }
-
-    @keyframes slideUp {
-      from { transform: translateY(16px); opacity: 0; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-
-    .modal-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 18px 22px;
-      border-bottom: 1px solid var(--border);
-      background: var(--surface2);
-    }
-
-    .modal-title {
-      font-family: 'DM Serif Display', serif;
-      font-size: 18px;
-    }
-
-    .modal-close {
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: var(--ink-muted);
-      font-size: 20px;
-      line-height: 1;
-      padding: 2px 6px;
-      border-radius: 2px;
-    }
-
-    .modal-close:hover { background: var(--surface); color: var(--ink); }
-
-    .modal-body { padding: 22px; }
-
-    .modal-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 10px;
-      padding: 16px 22px;
-      border-top: 1px solid var(--border);
-      background: var(--surface2);
-    }
-
-    .form-row { display: grid; gap: 16px; margin-bottom: 16px; }
-    .form-row.cols-2 { grid-template-columns: 1fr 1fr; }
-    .form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
-
-    .form-group { display: flex; flex-direction: column; gap: 5px; }
-
-    label {
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-      color: var(--ink-muted);
-    }
-
-    input, select, textarea {
-      padding: 9px 12px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 13px;
-      color: var(--ink);
-      background: var(--surface);
-      transition: border-color 0.15s;
-      outline: none;
-    }
-
-    input:focus, select:focus, textarea:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-light);
-    }
-
-    textarea { resize: vertical; min-height: 72px; }
-
-    .filter-bar {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
-
-    .filter-bar select, .filter-bar input {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      padding: 7px 11px;
-      font-size: 13px;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 60px 20px;
-      color: var(--ink-muted);
-    }
-
-    .empty-state .icon {
-      font-size: 40px;
-      margin-bottom: 12px;
-      opacity: 0.4;
-    }
-
-    .empty-state p { font-size: 13px; }
-
-    .report-grid {
-      display: grid;
-      gap: 20px;
-    }
-
-    .report-apt-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-    }
-
-    .report-apt-header {
-      background: var(--ink);
-      color: var(--bg);
-      padding: 14px 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .report-apt-name {
-      font-family: 'DM Serif Display', serif;
-      font-size: 16px;
-    }
-
-    .report-apt-total {
-      font-family: 'DM Mono', monospace;
-      font-size: 18px;
-      color: #FFC4A8;
-    }
-
-    .report-table th { background: var(--surface2); }
-    .report-year-row td { font-weight: 600; background: rgba(200,65,10,0.04); }
-
-    .scad-item {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      padding: 14px 18px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      margin-bottom: 8px;
-      transition: all 0.15s;
-    }
-
-    .scad-item:hover { border-color: var(--accent); }
-
-    .scad-date {
-      font-family: 'DM Mono', monospace;
-      font-size: 13px;
-      min-width: 90px;
-      color: var(--ink-muted);
-    }
-
-    .scad-days {
-      min-width: 56px;
-      text-align: center;
-    }
-
-    .scad-info { flex: 1; }
-    .scad-desc { font-weight: 500; }
-    .scad-apt { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
-
-    .scad-actions { display: flex; gap: 6px; }
-
-    .apt-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 14px;
-      margin-bottom: 24px;
-    }
-
-    .apt-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 18px 20px;
-      cursor: pointer;
-      transition: all 0.15s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .apt-card::before {
-      content: '';
-      position: absolute;
-      left: 0; top: 0; bottom: 0;
-      width: 3px;
-      background: var(--accent);
-    }
-
-    .apt-card:hover { border-color: var(--accent); box-shadow: var(--shadow); }
-
-    .apt-card-name {
-      font-family: 'DM Serif Display', serif;
-      font-size: 17px;
-      margin-bottom: 4px;
-    }
-
-    .apt-card-addr { font-size: 12px; color: var(--ink-muted); margin-bottom: 12px; }
-
-    .apt-card-stats { display: flex; gap: 16px; }
-
-    .apt-stat-val {
-      font-family: 'DM Mono', monospace;
-      font-size: 15px;
-      font-weight: 500;
-    }
-
-    .apt-stat-lbl { font-size: 11px; color: var(--ink-muted); }
-
-    .apt-card-actions {
-      position: absolute;
-      top: 12px; right: 12px;
-      display: flex; gap: 4px;
-      opacity: 0;
-      transition: opacity 0.15s;
-    }
-
-    .apt-card:hover .apt-card-actions { opacity: 1; }
-
-    .toast-container {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 9999;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .toast {
-      background: var(--ink);
-      color: var(--bg);
-      padding: 12px 18px;
-      border-radius: var(--radius);
-      font-size: 13px;
-      font-weight: 500;
-      box-shadow: var(--shadow-lg);
-      animation: toastIn 0.25s ease;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .toast.success { background: var(--accent2); }
-    .toast.error { background: var(--danger); }
-
-    @keyframes toastIn {
-      from { transform: translateX(20px); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-
-    .bar-chart { display: flex; gap: 8px; align-items: flex-end; padding: 16px 0; }
-    .bar-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
-    .bar { width: 100%; background: var(--accent); border-radius: 2px 2px 0 0; min-height: 2px; transition: height 0.3s; }
-    .bar-lbl { font-size: 10px; color: var(--ink-muted); }
-    .bar-val { font-size: 10px; font-family: 'DM Mono', monospace; color: var(--ink-muted); }
-
-    .section-divider {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--ink-muted);
-      margin: 24px 0 12px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .section-divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    @media (max-width: 768px) {
-      .stats-bar { grid-template-columns: 1fr 1fr; }
-      .topbar-nav { display: none; }
-      .main { padding: 16px; }
-    }
-  </style>
-</head>
-<body>
-
-  <nav class="topbar">
-    <div class="topbar-logo">Gest<span>Appart</span></div>
-    <div class="topbar-nav">
-      <button class="nav-btn active" onclick="showSection('dashboard')">🏠 Dashboard</button>
-      <button class="nav-btn" onclick="showSection('appartamenti')">🏢 Appartamenti</button>
-      <button class="nav-btn" onclick="showSection('spese')">💳 Spese</button>
-      <button class="nav-btn" onclick="showSection('report')">📊 Report</button>
-      <button class="nav-btn" onclick="showSection('scadenze')">🔔 Scadenze</button>
-    </div>
-    <div class="topbar-actions">
-      <button class="btn btn-ghost btn-sm" onclick="reloadFromGitHub()" title="Ricarica da GitHub">🔄 Aggiorna</button>
-    </div>
-  </nav>
-
-  <div class="toast-container" id="toastContainer"></div>
-
-  <div class="main">
-    <section class="section active" id="section-dashboard">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Dashboard</div>
-          <div class="page-subtitle">Panoramica generale di tutti gli appartamenti</div>
-        </div>
-        <div style="display:flex;gap:10px">
-          <select id="dashYear" onchange="renderDashboard()" style="padding:8px 12px;border:1px solid var(--border);border-radius:3px;font-size:13px;">
-            <option value="all">Tutti gli anni</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="stats-bar" id="statsBar">
-        <div class="stat-card">
-          <div class="stat-label">Appartamenti</div>
-          <div class="stat-value" id="statApt">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Spese totali</div>
-          <div class="stat-value accent" id="statTotal">€ 0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Spese quest'anno</div>
-          <div class="stat-value" id="statYear">€ 0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-label">Scadenze imminenti</div>
-          <div class="stat-value warn" id="statScad">0</div>
-        </div>
-      </div>
-
-      <div class="section-divider">Ultime spese</div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Data</th><th>Appartamento</th><th>Causale</th><th>Importo</th><th>Dettaglio</th>
-            </tr>
-          </thead>
-          <tbody id="dashRecentTbody">
-            <tr><td colspan="5"><div class="empty-state"><div class="icon">💳</div><p>Nessuna spesa inserita</p></div></td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="section-divider">Prossime scadenze</div>
-      <div id="dashScadenze"></div>
-    </section>
-
-    <section class="section" id="section-appartamenti">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Appartamenti</div>
-          <div class="page-subtitle">Gestisci il parco immobiliare</div>
-        </div>
-        <button class="btn btn-primary" onclick="openAptModal()">+ Nuovo appartamento</button>
-      </div>
-      <div class="apt-grid" id="aptGrid">
-        <div class="empty-state" style="grid-column:1/-1">
-          <div class="icon">🏢</div><p>Aggiungi il primo appartamento</p>
-        </div>
-      </div>
-    </section>
-
-    <section class="section" id="section-spese">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Spese</div>
-          <div class="page-subtitle">Registro di tutte le spese</div>
-        </div>
-        <button class="btn btn-primary" onclick="openSpesaModal()">+ Nuova spesa</button>
-      </div>
-
-      <div class="filter-bar">
-        <select id="fApt" onchange="renderSpese()"><option value="">Tutti gli appartamenti</option></select>
-        <select id="fYear" onchange="renderSpese()"><option value="">Tutti gli anni</option></select>
-        <select id="fCausale" onchange="renderSpese()"><option value="">Tutte le causali</option></select>
-        <input id="fSearch" type="text" placeholder="🔍 Cerca..." oninput="renderSpese()" style="min-width:180px;">
-      </div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Data</th><th>Appartamento</th><th>Causale</th><th>Importo</th><th>Dettaglio</th><th></th>
-            </tr>
-          </thead>
-          <tbody id="speseTbody"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="section" id="section-report">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Report</div>
-          <div class="page-subtitle">Spese per appartamento, anno e causale</div>
-        </div>
-        <div style="display:flex;gap:10px">
-          <select id="rYear" onchange="renderReport()" style="padding:8px 12px;border:1px solid var(--border);border-radius:3px;font-size:13px;">
-            <option value="all">Tutti gli anni</option>
-          </select>
-          <select id="rApt" onchange="renderReport()" style="padding:8px 12px;border:1px solid var(--border);border-radius:3px;font-size:13px;">
-            <option value="all">Tutti gli appartamenti</option>
-          </select>
-        </div>
-      </div>
-      <div id="reportContent"></div>
-    </section>
-
-    <section class="section" id="section-scadenze">
-      <div class="page-header">
-        <div>
-          <div class="page-title">Scadenze</div>
-          <div class="page-subtitle">Promemoria e date importanti</div>
-        </div>
-        <button class="btn btn-primary" onclick="openScadModal()">+ Nuova scadenza</button>
-      </div>
-      <div class="filter-bar">
-        <select id="sfApt" onchange="renderScadenze()"><option value="">Tutti gli appartamenti</option></select>
-        <select id="sfStato" onchange="renderScadenze()">
-          <option value="">Tutte</option>
-          <option value="future">Future</option>
-          <option value="scadute">Scadute</option>
-        </select>
-      </div>
-      <div id="scadenzeList"></div>
-    </section>
-  </div>
-
-  <div class="modal-overlay" id="modalApt">
-    <div class="modal">
-      <div class="modal-header">
-        <div class="modal-title" id="modalAptTitle">Nuovo appartamento</div>
-        <button class="modal-close" onclick="closeModal('modalApt')">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-row">
-          <div class="form-group">
-            <label>Nome / Identificativo *</label>
-            <input id="aptNome" type="text" placeholder="es. Appartamento A, Via Roma 3">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Indirizzo</label>
-            <input id="aptAddr" type="text" placeholder="Via, civico, città">
-          </div>
-        </div>
-        <div class="form-row cols-2">
-          <div class="form-group">
-            <label>Piano</label>
-            <input id="aptPiano" type="text" placeholder="es. 2°">
-          </div>
-          <div class="form-group">
-            <label>Superficie (m²)</label>
-            <input id="aptMq" type="number" placeholder="es. 75">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Note</label>
-            <textarea id="aptNote" placeholder="Note aggiuntive..."></textarea>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeModal('modalApt')">Annulla</button>
-        <button class="btn btn-primary" onclick="saveApt()">Salva</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="modalSpesa">
-    <div class="modal">
-      <div class="modal-header">
-        <div class="modal-title" id="modalSpesaTitle">Nuova spesa</div>
-        <button class="modal-close" onclick="closeModal('modalSpesa')">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-row cols-2">
-          <div class="form-group">
-            <label>Data *</label>
-            <input id="spData" type="date">
-          </div>
-          <div class="form-group">
-            <label>Importo (€) *</label>
-            <input id="spImporto" type="number" step="0.01" min="0" placeholder="0.00">
-          </div>
-        </div>
-        <div class="form-row cols-2">
-          <div class="form-group">
-            <label>Appartamento *</label>
-            <select id="spApt"><option value="">Seleziona...</option></select>
-          </div>
-          <div class="form-group">
-            <label>Causale *</label>
-            <select id="spCausale">
-              <option value="">Seleziona...</option>
-              <option>Condominio</option>
-              <option>Manutenzione</option>
-              <option>Utenze</option>
-              <option>Assicurazione</option>
-              <option>Tasse / IMU</option>
-              <option>Affitto (incasso)</option>
-              <option>Ristrutturazione</option>
-              <option>Amministratore</option>
-              <option>Altro</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Dettaglio</label>
-            <textarea id="spDettaglio" placeholder="Descrizione estesa..."></textarea>
-          </div>
-        </div>
-        <div class="form-row cols-2">
-          <div class="form-group">
-            <label>Fornitore / Destinatario</label>
-            <input id="spFornitore" type="text" placeholder="es. ENEL, Amministratore...">
-          </div>
-          <div class="form-group">
-            <label>Ricevuta n°</label>
-            <input id="spRicevuta" type="text" placeholder="Numero doc.">
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeModal('modalSpesa')">Annulla</button>
-        <button class="btn btn-primary" onclick="saveSpesa()">Salva</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="modalScad">
-    <div class="modal">
-      <div class="modal-header">
-        <div class="modal-title" id="modalScadTitle">Nuova scadenza</div>
-        <button class="modal-close" onclick="closeModal('modalScad')">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-row cols-2">
-          <div class="form-group">
-            <label>Data scadenza *</label>
-            <input id="scData" type="date">
-          </div>
-          <div class="form-group">
-            <label>Appartamento</label>
-            <select id="scApt"><option value="">Tutti / Generico</option></select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Descrizione *</label>
-            <input id="scDesc" type="text" placeholder="es. Pagamento IMU, Revisione caldaia...">
-          </div>
-        </div>
-        <div class="form-row cols-2">
-          <div class="form-group">
-            <label>Causale</label>
-            <select id="scCausale">
-              <option value="">—</option>
-              <option>Condominio</option>
-              <option>Manutenzione</option>
-              <option>Utenze</option>
-              <option>Assicurazione</option>
-              <option>Tasse / IMU</option>
-              <option>Ristrutturazione</option>
-              <option>Amministratore</option>
-              <option>Altro</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Importo stimato (€)</label>
-            <input id="scImporto" type="number" step="0.01" min="0" placeholder="0.00">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Note</label>
-            <textarea id="scNote" placeholder="Note aggiuntive..."></textarea>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeModal('modalScad')">Annulla</button>
-        <button class="btn btn-primary" onclick="saveScad()">Salva</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="modalConfirm">
-    <div class="modal" style="max-width:360px">
-      <div class="modal-header">
-        <div class="modal-title">Conferma eliminazione</div>
-        <button class="modal-close" onclick="closeModal('modalConfirm')">✕</button>
-      </div>
-      <div class="modal-body">
-        <p id="confirmMsg" style="color:var(--ink-muted)">Sei sicuro di voler eliminare questo elemento? L'azione non è reversibile.</p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-ghost" onclick="closeModal('modalConfirm')">Annulla</button>
-        <button class="btn btn-danger" id="confirmOk">Elimina</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // ============================================================
-    // CONFIGURAZIONE GITHUB (usata per salvare file JSON nel repo)
-    // ============================================================
-    // ATTENZIONE:
-    // - usare un token personale con permessi repo
-    // - in produzione NON mettere il token nel browser
-    // - per uso personale, funziona bene
-    const GITHUB_TOKEN = "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";
-    const GITHUB_OWNER = "ginola70-footgolf";
-    const GITHUB_REPO = "GestAppart";
-    const GITHUB_BRANCH = "main";
-    const GITHUB_FILE = "data.json";
-    const CACHE_KEY = "gestappart-cache";
-
-    const state = {
-      editingId: null,
-      confirmAction: null
-    };
-
-    function toast(msg, type = "success") {
-      const t = document.createElement("div");
-      t.className = "toast " + type;
-      t.textContent = (type === "success" ? "✓ " : "✗ ") + msg;
-      document.getElementById("toastContainer").appendChild(t);
-      setTimeout(() => t.remove(), 3000);
-    }
-
-    function openModal(id) {
-      document.getElementById(id).classList.add("open");
-    }
-
-    function closeModal(id) {
-      document.getElementById(id).classList.remove("open");
-      if (id === "modalConfirm") {
-        state.confirmAction = null;
-      } else {
-        state.editingId = null;
+    const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}?ref=${GITHUB_BRANCH}`;
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: "application/vnd.github.v3+json"
       }
-    }
-
-    document.querySelectorAll(".modal-overlay").forEach((o) => {
-      o.addEventListener("click", (e) => {
-        if (e.target === o) o.classList.remove("open");
-      });
     });
 
-    function fmtEur(n) {
-      return "€ " + parseFloat(n || 0).toLocaleString("it-IT", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      });
+    if (!response.ok) {
+      throw new Error(`Errore lettura GitHub: ${response.status}`);
     }
 
-    function fmtDate(s) {
-      return s ? new Date(s + "T00:00:00").toLocaleDateString("it-IT") : "";
+    const raw = await response.json();
+    if (!raw.content) {
+      throw new Error("File data.json vuoto o non accessibile");
     }
 
-    function daysDiff(s) {
-      return Math.round((new Date(s + "T00:00:00") - new Date()) / 86400000);
+    return JSON.parse(decodeBase64UTF8(raw.content));
+  }
+
+  async function saveGitHubJson(data) {
+    if (!GITHUB_TOKEN) {
+      throw new Error("Token GitHub non configurato");
     }
 
-    // ============================================================
-    // DB JSON su GitHub
-    // ============================================================
-    async function fetchGitHubJson() {
-      const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}?ref=${GITHUB_BRANCH}`;
+    const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}`;
 
-      const response = await fetch(url, {
-        headers: {
-          "Authorization": `token ${GITHUB_TOKEN}`,
-          "Accept": "application/vnd.github.v3+json"
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Errore lettura GitHub: ${response.status}`);
+    const getCurrent = await fetch(`${url}?ref=${GITHUB_BRANCH}`, {
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        Accept: "application/vnd.github.v3+json"
       }
+    });
 
-      const raw = await response.json();
-      // raw.content è Base64 in GitHub API
-      const decoded = atob(raw.content.replace(/\\n/g, ""));
-      return JSON.parse(decoded);
+    if (!getCurrent.ok) {
+      throw new Error(`Impossibile leggere file JSON: ${getCurrent.status}`);
     }
 
-    async function saveGitHubJson(data) {
-      const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE}`;
+    const currentFile = await getCurrent.json();
+    const payload = JSON.stringify(data, null, 2);
+    const encoded = btoa(unescape(encodeURIComponent(payload)));
 
-      const getCurrent = await fetch(`${url}?ref=${GITHUB_BRANCH}`, {
-        headers: {
-          "Authorization": `token ${GITHUB_TOKEN}`,
-          "Accept": "application/vnd.github.v3+json"
-        }
-      });
-
-      if (!getCurrent.ok) {
-        throw new Error(`Impossibile leggere file JSON: ${getCurrent.status}`);
-      }
-
-      const currentFile = await getCurrent.json();
-      const payload = JSON.stringify(data, null, 2);
-      const encoded = btoa(unescape(encodeURIComponent(payload)));
-
-      const response = await fetch(url, {
-        method: "PUT",
-        headers: {
-          "Authorization": `token ${GITHUB_TOKEN}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          message: `Aggiornamento dati ${new Date().toISOString()}`,
-          content: encoded,
-          sha: currentFile.sha,
-          branch: GITHUB_BRANCH
-        })
-      });
-
-      if (!response.ok) {
-        const txt = await response.text();
-        console.error("GitHub write failed:", txt);
-        throw new Error(`Errore scrittura GitHub: ${response.status}`);
-      }
-
-      localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-      return true;
-    }
-
-    const DB = {
-      uid: () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-
-      async get() {
-        try {
-          const cached = localStorage.getItem(CACHE_KEY);
-          if (cached) return JSON.parse(cached);
-
-          const data = await fetchGitHubJson();
-          localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-          return data;
-        } catch (error) {
-          console.error("DB.get error:", error);
-          toast("Errore nel caricamento dei dati dal server", "error");
-          return { apt: [], spese: [], scadenze: [] };
-        }
+    const response = await fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${GITHUB_TOKEN}`,
+        "Content-Type": "application/json",
+        Accept: "application/vnd.github.v3+json"
       },
+      body: JSON.stringify({
+        message: `Aggiornamento dati ${new Date().toISOString()}`,
+        content: encoded,
+        sha: currentFile.sha,
+        branch: GITHUB_BRANCH
+      })
+    });
 
-      async set(data) {
-        try {
-          await saveGitHubJson(data);
-          localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-          return true;
-        } catch (error) {
-          console.error("DB.set error:", error);
-          toast("Errore nel salvataggio dei dati sul server", "error");
-          throw error;
-        }
+    if (!response.ok) {
+      const txt = await response.text();
+      throw new Error(`Errore scrittura GitHub: ${response.status} - ${txt}`);
+    }
+
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    return true;
+  }
+
+  const DB = {
+    uid: () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+
+    async get() {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) return JSON.parse(cached);
+
+        const data = await fetchGitHubJson();
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        return data;
+      } catch (error) {
+        console.error("DB.get error:", error);
+        const local = localStorage.getItem(CACHE_KEY);
+        if (local) return JSON.parse(local);
+        toast("Errore nel caricamento dei dati dal server", "error");
+        return { apt: [], spese: [], scadenze: [] };
       }
+    },
+
+    async set(data) {
+      try {
+        await saveGitHubJson(data);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        return true;
+      } catch (error) {
+        console.error("DB.set error:", error);
+
+        // fallback locale: salva comunque in localStorage
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        toast("Salvataggio locale eseguito. Controlla la config GitHub", "error");
+        return true;
+      }
+    }
+  };
+
+  // ============================================================
+  // APPARTAMENTI
+  // ============================================================
+  async function openAptModal(id = null) {
+    state.editingId = id;
+    const d = await DB.get();
+    const apt = id ? (d.apt || []).find(a => a.id === id) : {};
+
+    document.getElementById("modalAptTitle").textContent = id ? "Modifica appartamento" : "Nuovo appartamento";
+    document.getElementById("aptNome").value = apt?.nome || "";
+    document.getElementById("aptAddr").value = apt?.addr || "";
+    document.getElementById("aptPiano").value = apt?.piano || "";
+    document.getElementById("aptMq").value = apt?.mq ?? "";
+    document.getElementById("aptNote").value = apt?.note || "";
+
+    openModal("modalApt");
+  }
+
+  async function saveApt() {
+    const nome = normalizeString(document.getElementById("aptNome").value);
+    if (!nome) {
+      toast("Inserisci un nome", "error");
+      return;
+    }
+
+    const pianoRaw = document.getElementById("aptPiano").value;
+    const mqRaw = document.getElementById("aptMq").value;
+
+    const d = await DB.get();
+    const apt = {
+      id: state.editingId || DB.uid(),
+      nome,
+      addr: normalizeString(document.getElementById("aptAddr").value),
+      piano: sanitizePiano(pianoRaw),
+      mq: sanitizeNumero(mqRaw, ""),
+      note: normalizeString(document.getElementById("aptNote").value)
     };
 
-    // ============================================================
-    // NAV
-    // ============================================================
-    function showSection(name) {
-      document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
-      document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
-
-      const target = document.getElementById("section-" + name);
-      if (target) target.classList.add("active");
-
-      document.querySelectorAll(".nav-btn").forEach(b => {
-        const txt = b.textContent.toLowerCase();
-        if (name === "dashboard" && txt.includes("dashboard")) b.classList.add("active");
-        if (name === "appartamenti" && txt.includes("appartamenti")) b.classList.add("active");
-        if (name === "spese" && txt.includes("spese")) b.classList.add("active");
-        if (name === "report" && txt.includes("report")) b.classList.add("active");
-        if (name === "scadenze" && txt.includes("scadenze")) b.classList.add("active");
-      });
-
-      if (name === "dashboard") renderDashboard();
-      if (name === "spese") { renderSpese(); populateFilters(); }
-      if (name === "report") { renderReport(); populateReportFilters(); }
-      if (name === "scadenze") { renderScadenze(); populateScadFilters(); }
-      if (name === "appartamenti") renderApt();
+    if (state.editingId) {
+      const idx = (d.apt || []).findIndex(a => a.id === state.editingId);
+      if (idx !== -1) {
+        d.apt[idx] = { ...d.apt[idx], ...apt };
+      }
+    } else {
+      d.apt = d.apt || [];
+      d.apt.push(apt);
     }
 
-    async function reloadFromGitHub() {
-      localStorage.removeItem(CACHE_KEY);
-      await initApp();
-      toast("Dati ricaricati da GitHub", "success");
+    await DB.set(d);
+    closeModal("modalApt");
+    renderApt();
+    populateSelectOptions();
+    renderDashboard();
+    toast("Appartamento salvato", "success");
+  }
+
+  async function saveSpesa() {
+    const data = document.getElementById("spData").value;
+    const importo = sanitizeNumero(document.getElementById("spImporto").value, null);
+    const appartamentoId = document.getElementById("spApt").value;
+    const causale = document.getElementById("spCausale").value;
+
+    if (!data || importo === null || !appartamentoId || !causale) {
+      toast("Completa tutti i campi obbligatori", "error");
+      return;
     }
 
-    // ============================================================
-    // POPOLAMENTO SELECT
-    // ============================================================
-    function populateSelectOptions() {
-      const d = JSON.parse(localStorage.getItem(CACHE_KEY) || '{"apt":[],"spese":[],"scadenze":[]}');
+    const d = await DB.get();
+    const entry = {
+      id: state.editingId || DB.uid(),
+      data,
+      importo: Number(importo.toFixed(2)),
+      appartamentoId,
+      causale,
+      dettaglio: normalizeString(document.getElementById("spDettaglio").value),
+      fornitore: normalizeString(document.getElementById("spFornitore").value),
+      ricevuta: normalizeString(document.getElementById("spRicevuta").value)
+    };
 
-      const aptList = d.apt || [];
-
-      const aptSelects = [
-        document.getElementById("spApt"),
-        document.getElementById("scApt"),
-        document.getElementById("fApt"),
-        document.getElementById("sfApt"),
-        document.getElementById("rApt")
-      ];
-
-      aptSelects.forEach(select => {
-        if (!select) return;
-        const currentValue = select.value;
-        select.innerHTML = "";
-        const baseOption = document.createElement("option");
-        if (select.id === "spApt") {
-          baseOption.value = "";
-          baseOption.textContent = "Seleziona...";
-          select.appendChild(baseOption);
-        } else if (select.id === "scApt") {
-          baseOption.value = "";
-          baseOption.textContent = "Tutti / Generico";
-          select.appendChild(baseOption);
-        } else if (select.id === "fApt" || select.id === "sfApt" || select.id === "rApt") {
-          baseOption.value = "";
-          baseOption.textContent = select.id === "rApt" ? "Tutti gli appartamenti" : "Tutti gli appartamenti";
-          select.appendChild(baseOption);
-        }
-
-        aptList.forEach(apt => {
-          const option = document.createElement("option");
-          option.value = apt.id;
-          option.textContent = apt.nome;
-          select.appendChild(option);
-        });
-
-        if (currentValue) {
-          select.value = currentValue;
-        }
-      });
+    if (state.editingId) {
+      const idx = (d.spese || []).findIndex(x => x.id === state.editingId);
+      if (idx !== -1) d.spese[idx] = { ...d.spese[idx], ...entry };
+    } else {
+      d.spese = d.spese || [];
+      d.spese.push(entry);
     }
 
-    function populateFilters() {
-      const d = JSON.parse(localStorage.getItem(CACHE_KEY) || '{"apt":[],"spese":[],"scadenze":[]}');
+    await DB.set(d);
+    closeModal("modalSpesa");
+    renderSpese();
+    renderDashboard();
+    renderReport();
+    populateFilters();
+    populateReportFilters();
+    toast("Spesa salvata", "success");
+  }
 
-      const aptSel = document.getElementById("fApt");
-      const yearSel = document.getElementById("fYear");
-      const causalSel = document.getElementById("fCausale");
-
-      if (aptSel) {
-        aptSel.innerHTML = '<option value="">Tutti gli appartamenti</option>';
-        (d.apt || []).forEach(a => {
-          const o = document.createElement("option");
-          o.value = a.id;
-          o.textContent = a.nome;
-          aptSel.appendChild(o);
-        });
-      }
-
-      if (yearSel) {
-        yearSel.innerHTML = '<option value="">Tutti gli anni</option>';
-        const years = [...new Set((d.spese || []).map(s => new Date(s.data + "T00:00:00").getFullYear()))].sort((a,b)=>b-a);
-        years.forEach(y => {
-          const o = document.createElement("option");
-          o.value = y;
-          o.textContent = y;
-          yearSel.appendChild(o);
-        });
-      }
-
-      if (causalSel) {
-        causalSel.innerHTML = '<option value="">Tutte le causali</option>';
-        const list = [...new Set((d.spese || []).map(s => s.causale).filter(Boolean))].sort();
-        list.forEach(c => {
-          const o = document.createElement("option");
-          o.value = c;
-          o.textContent = c;
-          causalSel.appendChild(o);
-        });
-      }
+  async function saveScad() {
+    const data = document.getElementById("scData").value;
+    const descrizione = normalizeString(document.getElementById("scDesc").value);
+    if (!data || !descrizione) {
+      toast("Inserisci data e descrizione", "error");
+      return;
     }
 
-    function populateScadFilters() {
-      const d = JSON.parse(localStorage.getItem(CACHE_KEY) || '{"apt":[],"spese":[],"scadenze":[]}');
+    const d = await DB.get();
+    const entry = {
+      id: state.editingId || DB.uid(),
+      data,
+      appartamentoId: document.getElementById("scApt").value || "",
+      descrizione,
+      causale: document.getElementById("scCausale").value || "",
+      importo: sanitizeNumero(document.getElementById("scImporto").value, 0),
+      note: normalizeString(document.getElementById("scNote").value)
+    };
 
-      const sfApt = document.getElementById("sfApt");
-      if (sfApt) {
-        sfApt.innerHTML = '<option value="">Tutti gli appartamenti</option>';
-        (d.apt || []).forEach(a => {
-          const o = document.createElement("option");
-          o.value = a.id;
-          o.textContent = a.nome;
-          sfApt.appendChild(o);
-        });
-      }
+    if (state.editingId) {
+      const idx = (d.scadenze || []).findIndex(x => x.id === state.editingId);
+      if (idx !== -1) d.scadenze[idx] = { ...d.scadenze[idx], ...entry };
+    } else {
+      d.scadenze = d.scadenze || [];
+      d.scadenze.push(entry);
     }
 
-    function populateReportFilters() {
-      const d = JSON.parse(localStorage.getItem(CACHE_KEY) || '{"apt":[],"spese":[],"scadenze":[]}');
-
-      const rYear = document.getElementById("rYear");
-      const rApt = document.getElementById("rApt");
-
-      if (rYear) {
-        rYear.innerHTML = '<option value="all">Tutti gli anni</option>';
-        const years = [...new Set((d.spese || []).map(s => new Date(s.data + "T00:00:00").getFullYear()))].sort((a,b)=>b-a);
-        years.forEach(y => {
-          const o = document.createElement("option");
-          o.value = y;
-          o.textContent = y;
-          rYear.appendChild(o);
-        });
-      }
-
-      if (rApt) {
-        rApt.innerHTML = '<option value="all">Tutti gli appartamenti</option>';
-        (d.apt || []).forEach(a => {
-          const o = document.createElement("option");
-          o.value = a.id;
-          o.textContent = a.nome;
-          rApt.appendChild(o);
-        });
-      }
-    }
-
-    // ============================================================
-    // APPARTAMENTI
-    // ============================================================
-    async function openAptModal(id = null) {
-      state.editingId = id;
-      const d = await DB.get();
-      const apt = id ? (d.apt || []).find(a => a.id === id) : {};
-      document.getElementById("modalAptTitle").textContent = id ? "Modifica appartamento" : "Nuovo appartamento";
-      document.getElementById("aptNome").value = apt?.nome || "";
-      document.getElementById("aptAddr").value = apt?.addr || "";
-      document.getElementById("aptPiano").value = apt?.piano || "";
-      document.getElementById("aptMq").value = apt?.mq || "";
-      document.getElementById("aptNote").value = apt?.note || "";
-      openModal("modalApt");
-    }
-
-    async function saveApt() {
-      const nome = document.getElementById("aptNome").value.trim();
-      if (!nome) {
-        toast("Inserisci un nome", "error");
-        return;
-      }
-
-      const d = await DB.get();
-      const apt = {
-        id: state.editingId || DB.uid(),
-        nome,
-        addr: document.getElementById("aptAddr").value.trim(),
-        piano: document.getElementById("aptPiano").value.trim(),
-        mq: document.getElementById("aptMq").value.trim(),
-        note: document.getElementById("aptNote").value.trim()
-      };
-
-      if (state.editingId) {
-        const idx = (d.apt || []).findIndex(a => a.id === state.editingId);
-        if (idx !== -1) {
-          d.apt[idx] = { ...d.apt[idx], ...apt };
-        }
-      } else {
-        d.apt = d.apt || [];
-        d.apt.push(apt);
-      }
-
-      await DB.set(d);
-      closeModal("modalApt");
-      renderApt();
-      populateSelectOptions();
-      renderDashboard();
-      toast("Appartamento salvato", "success");
-    }
-
-    function confirmDelete(type, id) {
-      const d = JSON.parse(localStorage.getItem(CACHE_KEY) || '{"apt":[],"spese":[],"scadenze":[]}');
-      let label = "elemento";
-
-      if (type === "apt") {
-        const apt = (d.apt || []).find(x => x.id === id);
-        label = apt ? apt.nome : "appartamento";
-      } else if (type === "spesa") {
-        const sp = (d.spese || []).find(x => x.id === id);
-        label = sp ? sp.causale : "spesa";
-      } else if (type === "scad") {
-        const sc = (d.scadenze || []).find(x => x.id === id);
-        label = sc ? sc.descrizione : "scadenza";
-      }
-
-      state.confirmAction = { type, id };
-      document.getElementById("confirmMsg").textContent = `Sei sicuro di voler eliminare "${label}"? L'azione non è reversibile.`;
-      openModal("modalConfirm");
-    }
-
-    async function deleteConfirmed() {
-      if (!state.confirmAction) return;
-
-      const d = await DB.get();
-      const { type, id } = state.confirmAction;
-
-      if (type === "apt") {
-        d.apt = (d.apt || []).filter(x => x.id !== id);
-      } else if (type === "spesa") {
-        d.spese = (d.spese || []).filter(x => x.id !== id);
-      } else if (type === "scad") {
-        d.scadenze = (d.scadenze || []).filter(x => x.id !== id);
-      }
-
-      await DB.set(d);
-      closeModal("modalConfirm");
-      renderApt();
-      renderSpese();
-      renderScadenze();
-      renderDashboard();
-      renderReport();
-      populateFilters();
-      populateScadFilters();
-      populateReportFilters();
-      populateSelectOptions();
-      toast("Elemento eliminato", "success");
-    }
-
-    function renderApt() {
-      const d = JSON.parse(localStorage.getItem(CACHE_KEY) || '{"apt":[],"spese":[],"scadenze":[]}');
-      const apts = d.apt || [];
-      const grid = document.getElementById("aptGrid");
-
-      if (!apts.length) {
-        grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="icon">🏢</div><p>Aggiungi il primo appartamento</p></div>';
-        return;
-      }
-
-      grid.innerHTML = apts.map((apt) => {
-        const spent = (d.spese || []).filter(s => s.appartamentoId === apt.id).reduce((sum, s) => sum + Number(s.importo || 0), 0);
-        const years = [...new Set((d.spese || []).filter(s => s.appartamentoId === apt.id).map(s => new Date(s.data + "T00:00:00").getFullYear()))].length;
-
-        return `
-          <div class="apt-card" onclick="openAptModal('${apt.id}')">
-            <div class="apt-card-actions">
-              <button class="btn btn-ghost btn-sm" type="button" onclick="event.stopPropagation(); openAptModal('${apt.id}')">✏️</button>
-              <button class="btn btn-danger btn-sm" type="button" onclick="event.stopPropagation(); confirmDelete('apt', '${apt.id}')">🗑️</button>
-            </div>
-            <div class="apt-card-name">${apt.nome}</div>
-            <div class="apt-card-addr">${apt.addr || "Nessun indirizzo"}</div>
-            <div class="apt-card-stats">
-              <div class="apt-stat">
-                <div class="apt-stat-val">${fmtEur(spent)}</div>
-                <div class="apt-stat-lbl">Spese</div>
-              </div>
-              <div class="apt-stat">
-                <div class="apt-stat-val">${years || 0}</div>
-                <div class="apt-stat-lbl">Anni</div>
-              </div>
-            </div>
-          </div>
-        `;
-      }).join("");
-    }
-
-    // ============================================================
-    // SPESE
-    // ============================================================
-    async function openSpesaModal(id = null) {
-      state.editingId = id;
-      const d = await DB.get();
-      populateSelectOptions();
-
-      const sp = id ? (d.spese || []).find(x => x.id === id) : {};
-
-      document.getElementById("modalSpesaTitle").textContent = id ? "Modifica spesa" : "Nuova spesa";
-
-      document.getElementById("spData").value = sp?.data || "";
-      document.getElementById("spImporto").value = sp?.importo || "";
-      document.getElementById("spApt").value = sp?.appartamentoId || "";
-      document.getElementById("spCausale").value = sp?.causale || "";
-      document.getElementById("spDettaglio").value = sp?.dettaglio || "";
-      document.getElementById("spFornitore").value = sp?.fornitore || "";
-      document.getElementById("spRicevuta").value = sp?.ricevuta || "";
-
-      openModal("modalSpesa");
-    }
-
-    async function saveSpesa() {
-      const data = document.getElementById("spData").value;
-      const importo = Number(document.getElementById("spImporto").value || 0);
-      const appartamentoId = document.getElementById("spApt").value;
-      const causale = document.getElementById("spCausale").value;
-
-      if (!data || !importo || !appartamentoId || !causale) {
-        toast("Completa tutti i campi obbligatori", "error");
-        return;
-      }
-
-      const d = await DB.get();
-      const entry = {
-        id: state.editingId || DB.uid(),
-        data,
-        importo: Number(importo.toFixed(2)),
-        appartamentoId,
-        causale,
-        dettaglio: document.getElementById("spDettaglio").value.trim(),
-        fornitore: document.getElementById("spFornitore").value.trim(),
-        ricevuta: document.getElementById("spRicevuta").value.trim()
-      };
-
-      if (state.editingId) {
-        const idx = (d.spese || []).findIndex(x => x.id === state.editingId);
-        if (idx !== -1) d.spese[idx] = { ...d.spese[idx], ...entry };
-      } else {
-        d.spese = d.spese || [];
-        d.spese.push(entry);
-      }
-
-      await DB.set(d);
-      closeModal("modalSpesa");
-      renderSpese();
-      renderDashboard();
-      renderReport();
-      populateFilters();
-      populateReportFilters();
-      toast("Spesa salvata", "success");
-    }
-
-    function renderSpese() {
-      const d = JSON.parse(localStorage.getItem(CACHE_KEY) || '{"apt":[],"spese":[],"scadenze":[]}');
-      const apts = d.apt || [];
-      const spese = d.spese || [];
-
-      const aptFilter = document.getElementById("fApt")?.value || "";
-      const yearFilter = document.getElementById("fYear")?.value || "";
-      const causaleFilter = document.getElementById("fCausale")?.value || "";
-      const search = (document.getElementById("fSearch")?.value || "").toLowerCase();
-
-      const filtered = spese.filter(item => {
-        const aptMatch = !aptFilter || item.appartamentoId === aptFilter;
-        const yearMatch = !yearFilter || new Date(item.data + "T00:00:00").getFullYear() === Number(yearFilter);
-        const causaleMatch = !causaleFilter || item.causale === causaleFilter;
-        const text = `${item.dettaglio || ""} ${item.fornitore || ""} ${item.ricevuta || ""}`.toLowerCase();
-        const searchMatch = !search || text.includes(search);
-
-        return aptMatch && yearMatch && causaleMatch && searchMatch;
-      }).sort((a,b) => new Date(b.data) - new Date(a.data));
-
-      const tbody = document.getElementById("speseTbody");
-      if (!filtered.length) {
-        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">💳</div><p>Nessuna spesa trovata</p></div></td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = filtered.map(item => {
-        const apt = apts.find(a => a.id === item.appartamentoId);
-        return `
-          <tr>
-            <td class="mono">${fmtDate(item.data)}</td>
-            <td><span class="badge badge-apt">${apt?.nome || "Generico"}</span></td>
-            <td><span class="badge badge-causale">${item.causale}</span></td>
-            <td class="amount">${fmtEur(item.importo)}</td>
-            <td>${item.dettaglio || "-"}</td>
-            <td>
-              <div style="display:flex;gap:6px;justify-content:flex-end">
-                <button class="btn btn-ghost btn-sm" onclick="openSpesaModal('${item.id}')">✏️</button>
-                <button class="btn btn-danger btn-sm" onclick="confirmDelete('spesa', '${item.id}')">🗑️</button>
-              </div>
-            </td>
-          </tr>
-        `;
-      }).join("");
-    }
-
-    // ============================================================
-    // SCADENZE
-    // ============================================================
-    async function openScadModal(id = null) {
-      state.editingId = id;
-      const d = await DB.get();
-      populateSelectOptions();
-
-      const sc = id ? (d.scadenze || []).find(x => x.id === id) : {};
-      document.getElementById("modalScadTitle").textContent = id ? "Modifica scadenza" : "Nuova scadenza";
-      document.getElementById("scData").value = sc?.data || "";
-      document.getElementById("scApt").value = sc?.appartamentoId || "";
-      document.getElementById("scDesc").value = sc?.descrizione || "";
-      document.getElementById("scCausale").value = sc?.causale || "";
-      document.getElementById("scImporto").value = sc?.importo || "";
-      document.getElementById("scNote").value = sc?.note || "";
-      openModal("modalScad");
-    }
-
-    async function saveScad() {
-      const data = document.getElementById("scData").value;
-      const descrizione = document.getElementById("scDesc").value.trim();
-      if (!data || !descrizione) {
-        toast("Inserisci data e descrizione", "error");
-        return;
-      }
-
-      const d = await DB.get();
-      const entry = {
-        id: state.editingId || DB.uid(),
-        data,
-        appartamentoId: document.getElementById("scApt").value || "",
-        descrizione,
-        causale: document.getElementById("scCausale").value || "",
-        importo: Number(document.getElementById("scImporto").value || 0),
-        note: document.getElementById("scNote").value.trim()
-      };
-
-      if (state.editingId) {
-        const idx = (d.scadenze || []).findIndex(x => x.id === state.editingId);
-        if (idx !== -1) d.scadenze[idx] = { ...d.scadenze[idx], ...entry };
-      } else {
-        d.scadenze = d.scadenze || [];
-        d.scadenze.push(entry);
-      }
-
-      await DB.set(d);
-      closeModal("modalScad");
-      renderScadenze();
-      renderDashboard();
-      toast("Scadenza salvata", "success");
-    }
-
-    function renderScadenze() {
-      const d = JSON.parse(localStorage.getItem(CACHE_KEY) || '{"apt":[],"spese":[],"scadenze":[]}');
-      const apts = d.apt || [];
-      const scadenze = (d.scadenze || []).sort((a,b) => new Date(a.data) - new Date(b.data));
-
-      const aptFilter = document.getElementById("sfApt")?.value || "";
-      const statoFilter = document.getElementById("sfStato")?.value || "";
-
-      const filtered = scadenze.filter(item => {
-        const aptMatch = !aptFilter || item.appartamentoId === aptFilter;
-        const now = new Date();
-        const diff = daysDiff(item.data);
-
-        let statoMatch = true;
-        if (statoFilter === "future") statoMatch = diff >= 0;
-        if (statoFilter === "scadute") statoMatch = diff < 0;
-
-        return aptMatch && statoMatch;
-      });
-
-      const list = document.getElementById("scadenzeList");
-      if (!filtered.length) {
-        list.innerHTML = '<div class="empty-state"><div class="icon">🔔</div><p>Nessuna scadenza trovata</p></div>';
-        return;
-      }
-
-      list.innerHTML = filtered.map(item => {
-        const diff = daysDiff(item.data);
-        const apt = apts.find(a => a.id === item.appartamentoId);
-        let badgeClass = "badge-ok";
-        let label = "in corso";
-
-        if (diff < 0) { badgeClass = "badge-danger"; label = `${Math.abs(diff)} giorni scaduti`; }
-        else if (diff <= 7) { badgeClass = "badge-warn"; label = `${diff} giorni`; }
-        else { badgeClass = "badge-ok"; label = `${diff} giorni`; }
-
-        return `
-          <div class="scad-item">
-            <div class="scad-date">${fmtDate(item.data)}</div>
-            <div class="scad-days"><span class="badge ${badgeClass}">${label}</span></div>
-            <div class="scad-info">
-              <div class="scad-desc">${item.descrizione}</div>
-              <div class="scad-apt">${apt?.nome || "Generico"}${item.causale ? " · " + item.causale : ""}</div>
-            </div>
-            <div class="scad-actions">
-              <button class="btn btn-ghost btn-sm" onclick="openScadModal('${item.id}')">✏️</button>
-              <button class="btn btn-danger btn-sm" onclick="confirmDelete('scad', '${item.id}')">🗑️</button>
-            </div>
-          </div>
-        `;
-      }).join("");
-    }
-
-    // ============================================================
-    // REPORT
-    // ============================================================
-    function renderReport() {
-      const d = JSON.parse(localStorage.getItem(CACHE_KEY) || '{"apt":[],"spese":[],"scadenze":[]}');
-      const apts = d.apt || [];
-      const spese = d.spese || [];
-
-      const yearFilter = document.getElementById("rYear")?.value || "all";
-      const aptFilter = document.getElementById("rApt")?.value || "all";
-
-      const reportContent = document.getElementById("reportContent");
-      const filteredApts = apts.filter(apt => aptFilter === "all" || apt.id === aptFilter);
-      const filteredSpese = spese.filter(item => {
-        const y = new Date(item.data + "T00:00:00").getFullYear();
-        const yearOk = yearFilter === "all" || y === Number(yearFilter);
-        const aptOk = aptFilter === "all" || item.appartamentoId === aptFilter;
-        return yearOk && aptOk;
-      });
-
-      if (!filteredApts.length) {
-        reportContent.innerHTML = '<div class="empty-state"><div class="icon">📊</div><p>Nessun appartamento disponibile</p></div>';
-        return;
-      }
-
-      let html = "";
-      filteredApts.forEach(apt => {
-        const list = filteredSpese.filter(s => s.appartamentoId === apt.id);
-        const groups = {};
-
-        list.forEach(s => {
-          const y = new Date(s.data + "T00:00:00").getFullYear();
-          if (!groups[y]) groups[y] = {};
-          if (!groups[y][s.causale]) groups[y][s.causale] = 0;
-          groups[y][s.causale] += Number(s.importo || 0);
-        });
-
-        const total = Object.values(groups).reduce((sum, byCausale) => sum + Object.values(byCausale).reduce((s, v) => s + v, 0), 0);
-
-        const years = Object.keys(groups).sort((a,b) => Number(a) - Number(b));
-        const rows = years.map(year => {
-          const itemByCausale = groups[year];
-          const totalYear = Object.values(itemByCausale).reduce((s,v) => s + v, 0);
-          const causaleRows = Object.entries(itemByCausale).map(([causale, val]) => `
-            <tr>
-              <td>${causale}</td>
-              <td class="amount">${fmtEur(val)}</td>
-            </tr>
-          `).join("");
-
-          return `
-            <tr class="report-year-row">
-              <td colspan="2">${year}</td>
-            </tr>
-            ${causaleRows}
-            <tr>
-              <td><strong>Totale</strong></td>
-              <td class="amount"><strong>${fmtEur(totalYear)}</strong></td>
-            </tr>
-          `;
-        }).join("");
-
-        html += `
-          <div class="report-apt-card">
-            <div class="report-apt-header">
-              <div class="report-apt-name">${apt.nome}</div>
-              <div class="report-apt-total">${fmtEur(total)}</div>
-            </div>
-            <div class="table-wrap">
-              <table class="report-table">
-                <thead>
-                  <tr><th>Causale</th><th>Importo</th></tr>
-                </thead>
-                <tbody>
-                  ${rows || '<tr><td colspan="2">Nessuna spesa</td></tr>'}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        `;
-      });
-
-      reportContent.innerHTML = html || '<div class="empty-state"><div class="icon">📊</div><p>Nessuna spesa da mostrare</p></div>';
-    }
-
-    // ============================================================
-    // DASHBOARD
-    // ============================================================
-    function renderDashboard() {
-      const d = JSON.parse(localStorage.getItem(CACHE_KEY) || '{"apt":[],"spese":[],"scadenze":[]}');
-      const apts = d.apt || [];
-      const spese = d.spese || [];
-      const scadenze = d.scadenze || [];
-
-      const yearFilter = document.getElementById("dashYear")?.value || "all";
-      const filteredSpese = spese.filter(item => {
-        if (yearFilter === "all") return true;
-        return new Date(item.data + "T00:00:00").getFullYear() === Number(yearFilter);
-      });
-
-      const total = filteredSpese.reduce((sum, item) => sum + Number(item.importo || 0), 0);
-      const yearNow = new Date().getFullYear();
-      const yearTotal = filteredSpese.filter(item => new Date(item.data + "T00:00:00").getFullYear() === yearNow).reduce((sum, item) => sum + Number(item.importo || 0), 0);
-
-      document.getElementById("statApt").textContent = String(apts.length);
-      document.getElementById("statTotal").textContent = fmtEur(total);
-      document.getElementById("statYear").textContent = fmtEur(yearTotal);
-      document.getElementById("statScad").textContent = String(scadenze.filter(s => daysDiff(s.data) <= 30 && daysDiff(s.data) >= 0).length);
-
-      const recent = [...filteredSpese].sort((a,b) => new Date(b.data) - new Date(a.data)).slice(0, 5);
-      const dashRecentTbody = document.getElementById("dashRecentTbody");
-      if (!recent.length) {
-        dashRecentTbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="icon">💳</div><p>Nessuna spesa inserita</p></div></td></tr>';
-      } else {
-        const map = {};
-        apts.forEach(a => map[a.id] = a.nome);
-        dashRecentTbody.innerHTML = recent.map(item => `
-          <tr>
-            <td class="mono">${fmtDate(item.data)}</td>
-            <td><span class="badge badge-apt">${map[item.appartamentoId] || "Generico"}</span></td>
-            <td><span class="badge badge-causale">${item.causale}</span></td>
-            <td class="amount">${fmtEur(item.importo)}</td>
-            <td>${item.dettaglio || "-"}</td>
-          </tr>
-        `).join("");
-      }
-
-      const upcoming = [...scadenze].filter(s => daysDiff(s.data) <= 30 && daysDiff(s.data) >= 0).sort((a,b) => new Date(a.data) - new Date(b.data)).slice(0, 5);
-      const dashScadenze = document.getElementById("dashScadenze");
-      if (!upcoming.length) {
-        dashScadenze.innerHTML = '<div class="empty-state"><div class="icon">🔔</div><p>Nessuna scadenza imminente</p></div>';
-      } else {
-        dashScadenze.innerHTML = upcoming.map(item => {
-          const apt = apts.find(a => a.id === item.appartamentoId);
-          return `
-            <div class="scad-item">
-              <div class="scad-date">${fmtDate(item.data)}</div>
-              <div class="scad-days"><span class="badge badge-warn">${daysDiff(item.data)} gg</span></div>
-              <div class="scad-info">
-                <div class="scad-desc">${item.descrizione}</div>
-                <div class="scad-apt">${apt?.nome || "Generico"}${item.causale ? " · " + item.causale : ""}</div>
-              </div>
-            </div>
-          `;
-        }).join("");
-      }
-
-      const dashYear = document.getElementById("dashYear");
-      if (dashYear) {
-        const years = [...new Set(spese.map(s => new Date(s.data + "T00:00:00").getFullYear()))].sort((a,b) => b-a);
-        const current = dashYear.value;
-        dashYear.innerHTML = '<option value="all">Tutti gli anni</option>' +
-          years.map(y => `<option value="${y}">${y}</option>`).join("");
-        dashYear.value = years.includes(Number(current)) ? String(current) : "all";
-      }
-    }
-
-    // ============================================================
-    // INIT
-    // ============================================================
-    async function initApp() {
-      const data = await DB.get();
-      localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-      populateSelectOptions();
-      populateFilters();
-      populateScadFilters();
-      populateReportFilters();
-      renderApt();
-      renderSpese();
-      renderScadenze();
-      renderReport();
-      renderDashboard();
-      showSection("dashboard");
-    }
-
-    document.getElementById("confirmOk").addEventListener("click", deleteConfirmed);
-
-    initApp();
-  </script>
-</body>
-</html>
+    await DB.set(d);
+    closeModal("modalScad");
+    renderScadenze();
+    renderDashboard();
+    toast("Scadenza salvata", "success");
+  }
+
+  // ============================================================
+  // INIZIO APP
+  // ============================================================
+  async function initApp() {
+    const data = await DB.get();
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    populateSelectOptions();
+    populateFilters();
+    populateScadFilters();
+    populateReportFilters();
+    renderApt();
+    renderSpese();
+    renderScadenze();
+    renderReport();
+    renderDashboard();
+    showSection("dashboard");
+  }
+
+  document.getElementById("confirmOk").addEventListener("click", deleteConfirmed);
+  initApp();
+</script>
