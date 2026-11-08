@@ -1,0 +1,12 @@
+name = "gestappart-api"
+main = "worker.js"
+compatibility_date = "2025-03-01"
+
+[vars]
+# GitHub Pages origin. Add localhost only if you need local development.
+ALLOWED_ORIGINS = "https://ginola70-footgolf.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "gestappart-db"
+database_id = "REPLACE_WITH_DATABASE_ID"
