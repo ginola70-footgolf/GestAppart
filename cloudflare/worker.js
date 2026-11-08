@@ -73,10 +73,18 @@ function validData(data) {
 export default {
   async fetch(request, env) {
     const origin = allowedOrigin(request, env);
-    if (request.method === 'OPTIONS') {
-      if (!origin) return response(request, env, { error: 'origin_not_allowed' }, 403);
-      return response(request, env, {}, 204);
-    }
+if (request.method === "OPTIONS") {
+  return new Response(null, {   // 👈 body null, non ""
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": origin,      // l'origine specifica, non "*"
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Max-Age": "86400",
+      "Vary": "Origin",
+    },
+  });
+}
     if (!origin) return response(request, env, { error: 'origin_not_allowed' }, 403);
     if (!env.DB || !env.APP_PASSWORD || !env.SESSION_SECRET) {
       return response(request, env, { error: 'server_not_configured' }, 500);
