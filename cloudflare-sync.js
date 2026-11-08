@@ -4,7 +4,7 @@
 (() => {
   'use strict';
 
-  const API_BASE = 'https://gestappart-api.workers.dev';
+  const API_BASE = 'https://gestappart-api.ginola70.workers.devn';
   const STORAGE_KEY = 'gestappart';
   const originalGet = DB.get;
   let cache = { apt: [], spese: [], scadenze: [] };
