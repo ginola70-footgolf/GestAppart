@@ -9,4 +9,4 @@ ALLOWED_ORIGINS = "https://ginola70-footgolf.github.io"
 [[d1_databases]]
 binding = "DB"
 database_name = "gestappart-db"
-database_id = "REPLACE_WITH_DATABASE_ID"
+database_id = "509e7a20-d877-47b1-afe0-843c2e67e1af"
